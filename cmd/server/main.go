@@ -6,12 +6,10 @@ import (
 
 	"github.com/go-kratos/kratos-layout/internal/conf"
 	"github.com/go-kratos/kratos/v2"
-	"github.com/go-kratos/kratos/v2/config"
-	"github.com/go-kratos/kratos/v2/config/file"
-	"github.com/go-kratos/kratos/v2/log"
-	"github.com/go-kratos/kratos/v2/middleware/tracing"
+	kratoslog "github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 	"github.com/go-kratos/kratos/v2/transport/http"
+	"github.com/gomicroim/gomicroim/v2/pkg/log"
 )
 
 // go build -ldflags "-X main.Version=x.y.z"
@@ -27,10 +25,10 @@ var (
 )
 
 func init() {
-	flag.StringVar(&flagconf, "conf", "../../configs", "config path, eg: -conf config.yaml")
+	flag.StringVar(&flagconf, "conf", "../../configs/config.yaml", "config path, eg: -conf config.yaml")
 }
 
-func newApp(logger log.Logger, gs *grpc.Server, hs *http.Server) *kratos.App {
+func newApp(logger *log.Logger, gs *grpc.Server, hs *http.Server) *kratos.App {
 	return kratos.New(
 		kratos.ID(id),
 		kratos.Name(Name),
@@ -46,32 +44,14 @@ func newApp(logger log.Logger, gs *grpc.Server, hs *http.Server) *kratos.App {
 
 func main() {
 	flag.Parse()
-	logger := log.With(log.NewStdLogger(os.Stdout),
-		"ts", log.DefaultTimestamp,
-		"caller", log.DefaultCaller,
-		"service.id", id,
-		"service.name", Name,
-		"service.version", Version,
-		"trace.id", tracing.TraceID(),
-		"span.id", tracing.SpanID(),
-	)
-	c := config.New(
-		config.WithSource(
-			file.NewSource(flagconf),
-		),
-	)
-	defer c.Close()
+	kratoslog.SetLogger(log.MustNewLogger(id, Name, Version, true, 2))
+	log.SetGlobalLogger(log.MustNewLogger(id, Name, Version, true, 0))
 
-	if err := c.Load(); err != nil {
-		panic(err)
-	}
+	bc := conf.MustLoad(flagconf)
 
-	var bc conf.Bootstrap
-	if err := c.Scan(&bc); err != nil {
-		panic(err)
-	}
-
-	app, cleanup, err := wireApp(bc.Server, bc.Data, logger)
+	app, cleanup, err := wireApp(bc.Server, bc.Data,
+		log.MustNewLogger(id, Name, Version, true, 4), // fix kratos caller stack
+		log.L)
 	if err != nil {
 		panic(err)
 	}
