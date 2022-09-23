@@ -8,6 +8,7 @@ import "google/protobuf/duration.proto";
 message Bootstrap {
   Server server = 1;
   Data data = 2;
+  Registry registry = 3;
 }
 
 message Server {
@@ -23,6 +24,14 @@ message Server {
   }
   HTTP http = 1;
   GRPC grpc = 2;
+}
+
+message Registry {
+  message ETCD {
+    repeated string endpoints = 1;
+    string register_server_name = 2;
+  }
+  ETCD etcd = 3;
 }
 
 message Data {

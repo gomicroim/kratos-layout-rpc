@@ -5,11 +5,14 @@ import (
 	"os"
 
 	"github.com/go-kratos/kratos-layout/internal/conf"
+	"github.com/go-kratos/kratos/contrib/registry/etcd/v2"
 	"github.com/go-kratos/kratos/v2"
 	kratoslog "github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 	"github.com/go-kratos/kratos/v2/transport/http"
 	"github.com/gomicroim/gomicroim/v2/pkg/log"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
 )
 
 // go build -ldflags "-X main.Version=x.y.z"
@@ -28,7 +31,7 @@ func init() {
 	flag.StringVar(&flagconf, "conf", "../../configs/config.yaml", "config path, eg: -conf config.yaml")
 }
 
-func newApp(logger *log.Logger, gs *grpc.Server, hs *http.Server) *kratos.App {
+func newApp(logger *log.Logger, gs *grpc.Server, hs *http.Server, registry *etcd.Registry) *kratos.App {
 	return kratos.New(
 		kratos.ID(id),
 		kratos.Name(Name),
@@ -37,8 +40,8 @@ func newApp(logger *log.Logger, gs *grpc.Server, hs *http.Server) *kratos.App {
 		kratos.Logger(logger),
 		kratos.Server(
 			gs,
-			hs,
 		),
+		kratos.Registrar(registry),
 	)
 }
 
@@ -49,9 +52,20 @@ func main() {
 
 	bc := conf.MustLoad(flagconf)
 
+	// register etcd
+	etcdClient, err := clientv3.New(clientv3.Config{
+		Endpoints: bc.Registry.Etcd.Endpoints,
+	})
+	if err != nil {
+		panic(err)
+	}
+	log.L.Info("register etcd",
+		zap.Strings("endpoints", bc.Registry.Etcd.Endpoints))
+	reg := etcd.New(etcdClient)
+
 	app, cleanup, err := wireApp(bc.Server, bc.Data,
 		log.MustNewLogger(id, Name, Version, true, 4), // fix kratos caller stack
-		log.L)
+		log.L, reg)
 	if err != nil {
 		panic(err)
 	}
